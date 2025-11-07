@@ -6,35 +6,50 @@ import { NextResponse } from "next/server";
 
 
 // add new coupon
+// add new coupon
 export async function POST(request) {
-    try {
-        const { userId } = getAuth(request)
-        const isAdmin = await authAdmin(userId)
-        if (!isAdmin) {
-            return NextResponse.json({ error: "not authorized" }, { status: 401 });
-        }
-        const { coupon } = await request.json()
-        coupon.code = coupon.code.toUpperCase()
-
-        await prisma.coupon.create({ data: coupon }).then(async (coupon) => {
-            // Run Inngest sheduler Function to delete coupon on expiry
-
-            await inngest.send({
-                name: "app/coupon.expired",
-                data: {
-                    code: coupon.code,
-                    expires_at: coupon.expiresAt,
-                }
-            })
-
-        })
-
-        return NextResponse.json({ message: "coupon added successfully" })
-    } catch (error) {
-        console.error(error);
-        return NextResponse.json({ error: error.code || error.message }, { status: 400 })
+  try {
+    const { userId } = getAuth(request)
+    const isAdmin = await authAdmin(userId)
+    if (!isAdmin) {
+      return NextResponse.json({ error: "not authorized" }, { status: 401 });
     }
+    const { coupon } = await request.json();
+    coupon.code = coupon.code.toUpperCase();
+
+    let newCoupon;
+    try {
+      newCoupon = await prisma.coupon.create({ data: coupon });
+    } catch (error) {
+      if (error.code === 'P2002') {
+        return NextResponse.json({ error: "Coupon code already exists!" }, { status: 400 });
+      }
+      console.error(error);
+      return NextResponse.json({ error: error.code || error.message }, { status: 400 });
+    }
+
+    // Try-catch for inngest event (ignore event network errors)
+    try {
+      await inngest.send({
+        name: "app/coupon/expired",
+        data: {
+          code: newCoupon.code,
+          expires_at: newCoupon.expiresAt,
+        }
+      });
+    } catch (eventError) {
+      // Optionally log, but do not block response!
+      console.error("Inngest send failed:", eventError);
+    }
+
+    return NextResponse.json({ message: "coupon added successfully", coupon: newCoupon });
+
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: error.code || error.message }, { status: 400 });
+  }
 }
+
 
 // DELETE coupon /api/coupon?id=couponId
 export async function DELETE(request) {

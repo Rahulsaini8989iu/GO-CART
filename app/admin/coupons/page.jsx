@@ -49,7 +49,10 @@ export default function AdminCoupons() {
                 headers: { Authorization: `Bearer ${token}` }
             })
             toast.success(data.message)
-            await fetchCoupons()
+            // Ye line add karo:
+            setCoupons([...coupons, data.coupon])
+            // fetchCoupons() ko yahan call karne ki jarurat nahi, kyonki ab state direct update ho gayi hai.
+
         } catch (error) {
             toast.error(error?.response?.data?.error || error.massage)
         }
@@ -66,7 +69,7 @@ export default function AdminCoupons() {
             const confirm = window.confirm("Are you sure you want to delete this coupon?")
             if (!confirm) return;
             const token = await getToken()
-            await axios.delete('/api/admin/coupon?code=${code}', {
+            await axios.delete(`/api/admin/coupon?code=${code}`, {
                 headers: { Authorization: `Bearer ${token}` }
             })
             await fetchCoupons()
